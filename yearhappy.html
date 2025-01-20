@@ -1,0 +1,522 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>3D烟花</title>
+
+<style>
+html,body,.box{
+	margin:0px;
+	width:100%;
+	height:100%;
+	overflow:hidden;
+	background:#000;
+    text-align: center;
+}
+
+#canvas{
+	width:100%;
+	height:100%;
+}
+
+#year{
+    width: 100%;
+    height: 10%;
+    position: absolute;
+    left: 0;
+    line-height: 10%;
+    color: red;
+    top: 45%;
+    text-align: center;
+
+}
+.audio{
+    position: absolute;
+    left: 0;
+    display: none;
+}
+#zhufu{
+    position: absolute;
+    left: 0;
+    width: 100%;
+    text-align: center;
+}
+</style>
+</head>
+<body>
+    <div class="box">
+        <h1 id="zhufu"></h1>
+        <audio src="https://lv-sycdn.kuwo.cn/b642c937721458e86e8832e223ed372e/678d0031/resource/30106/trackmedia/M500002I8dhW05PgTU.mp3" controls autoplay loop class="audio"></audio>
+        <h1 id="year"></h1>
+        <canvas id="canvas"></canvas>
+    </div>
+<script>
+var box = document.getElementsByClassName('box')[0]
+var audio = document.getElementsByClassName('audio')[0]
+box.onclick=()=>{
+    audio.play()
+}
+function initVars(){
+
+	pi=Math.PI;
+	ctx=canvas.getContext("2d");
+	canvas.width=canvas.clientWidth;
+	canvas.height=canvas.clientHeight;
+	cx=canvas.width/2;
+	cy=canvas.height/2;
+	playerZ=-25;
+	playerX=playerY=playerVX=playerVY=playerVZ=pitch=yaw=pitchV=yawV=0;
+	scale=600;
+	seedTimer=0;seedInterval=5,seedLife=100;gravity=.02;
+	seeds=new Array();
+	sparkPics=new Array();
+	s="https://cantelope.org/NYE/";
+	for(i=1;i<=10;++i){
+		sparkPic=new Image();
+		sparkPic.src=s+"spark"+i+".png";
+		sparkPics.push(sparkPic);
+	}
+	sparks=new Array();
+	pow1=new Audio(s+"pow1.ogg");
+	pow2=new Audio(s+"pow2.ogg");
+	pow3=new Audio(s+"pow3.ogg");
+	pow4=new Audio(s+"pow4.ogg");
+	frames = 0;
+}
+
+function rasterizePoint(x,y,z){
+
+	var p,d;
+	x-=playerX;
+	y-=playerY;
+	z-=playerZ;
+	p=Math.atan2(x,z);
+	d=Math.sqrt(x*x+z*z);
+	x=Math.sin(p-yaw)*d;
+	z=Math.cos(p-yaw)*d;
+	p=Math.atan2(y,z);
+	d=Math.sqrt(y*y+z*z);
+	y=Math.sin(p-pitch)*d;
+	z=Math.cos(p-pitch)*d;
+	var rx1=-1000,ry1=1,rx2=1000,ry2=1,rx3=0,ry3=0,rx4=x,ry4=z,uc=(ry4-ry3)*(rx2-rx1)-(rx4-rx3)*(ry2-ry1);
+	if(!uc) return {x:0,y:0,d:-1};
+	var ua=((rx4-rx3)*(ry1-ry3)-(ry4-ry3)*(rx1-rx3))/uc;
+	var ub=((rx2-rx1)*(ry1-ry3)-(ry2-ry1)*(rx1-rx3))/uc;
+	if(!z)z=.000000001;
+	if(ua>0&&ua<1&&ub>0&&ub<1){
+		return {
+			x:cx+(rx1+ua*(rx2-rx1))*scale,
+			y:cy+y/z*scale,
+			d:Math.sqrt(x*x+y*y+z*z)
+		};
+	}else{
+		return {
+			x:cx+(rx1+ua*(rx2-rx1))*scale,
+			y:cy+y/z*scale,
+			d:-1
+		};
+	}
+}
+
+function spawnSeed(){
+	
+	seed=new Object();
+	seed.x=-50+Math.random()*100;
+	seed.y=25;
+	seed.z=-50+Math.random()*100;
+	seed.vx=.1-Math.random()*.2;
+	seed.vy=-1.5;//*(1+Math.random()/2);
+	seed.vz=.1-Math.random()*.2;
+	seed.born=frames;
+	seeds.push(seed);
+}
+
+function splode(x,y,z){
+	
+	t=5+parseInt(Math.random()*150);
+	sparkV=1+Math.random()*2.5;
+	type=parseInt(Math.random()*3);
+	switch(type){
+		case 0:
+			pic1=parseInt(Math.random()*10);
+			break;
+		case 1:
+			pic1=parseInt(Math.random()*10);
+			do{ pic2=parseInt(Math.random()*10); }while(pic2==pic1);
+			break;
+		case 2:
+			pic1=parseInt(Math.random()*10);
+			do{ pic2=parseInt(Math.random()*10); }while(pic2==pic1);
+			do{ pic3=parseInt(Math.random()*10); }while(pic3==pic1 || pic3==pic2);
+			break;
+	}
+	for(m=1;m<t;++m){
+		spark=new Object();
+		spark.x=x; spark.y=y; spark.z=z;
+		p1=pi*2*Math.random();
+		p2=pi*Math.random();
+		v=sparkV*(1+Math.random()/6)
+		spark.vx=Math.sin(p1)*Math.sin(p2)*v;
+		spark.vz=Math.cos(p1)*Math.sin(p2)*v;
+		spark.vy=Math.cos(p2)*v;
+		switch(type){
+			case 0: spark.img=sparkPics[pic1]; break;
+			case 1:
+				spark.img=sparkPics[parseInt(Math.random()*2)?pic1:pic2];
+				break;
+			case 2:
+				switch(parseInt(Math.random()*3)){
+					case 0: spark.img=sparkPics[pic1]; break;
+					case 1: spark.img=sparkPics[pic2]; break;
+					case 2: spark.img=sparkPics[pic3]; break;
+				}
+				break;
+		}
+		spark.radius=25+Math.random()*50;
+		spark.alpha=1;
+		spark.trail=new Array();
+		sparks.push(spark);
+	}
+	switch(parseInt(Math.random()*4)){
+		case 0:	pow=new Audio(s+"pow1.ogg"); break;
+		case 1:	pow=new Audio(s+"pow2.ogg"); break;
+		case 2:	pow=new Audio(s+"pow3.ogg"); break;
+		case 3:	pow=new Audio(s+"pow4.ogg"); break;
+	}
+	d=Math.sqrt((x-playerX)*(x-playerX)+(y-playerY)*(y-playerY)+(z-playerZ)*(z-playerZ));
+	pow.volume=1.5/(1+d/10);
+	pow.play();
+}function doLogic(){
+	
+	if(seedTimer<frames){
+		seedTimer=frames+seedInterval*Math.random()*10;
+		spawnSeed();
+	}
+	for(i=0;i<seeds.length;++i){
+		seeds[i].vy+=gravity;
+		seeds[i].x+=seeds[i].vx;
+		seeds[i].y+=seeds[i].vy;
+		seeds[i].z+=seeds[i].vz;
+		if(frames-seeds[i].born>seedLife){
+			splode(seeds[i].x,seeds[i].y,seeds[i].z);
+			seeds.splice(i,1);
+		}
+	}
+	for(i=0;i<sparks.length;++i){
+		if(sparks[i].alpha>0 && sparks[i].radius>5){
+			sparks[i].alpha-=.01;
+			sparks[i].radius/=1.02;
+			sparks[i].vy+=gravity;
+			point=new Object();
+			point.x=sparks[i].x;
+			point.y=sparks[i].y;
+			point.z=sparks[i].z;
+			if(sparks[i].trail.length){
+				x=sparks[i].trail[sparks[i].trail.length-1].x;
+				y=sparks[i].trail[sparks[i].trail.length-1].y;
+				z=sparks[i].trail[sparks[i].trail.length-1].z;
+				d=((point.x-x)*(point.x-x)+(point.y-y)*(point.y-y)+(point.z-z)*(point.z-z));
+				if(d>9){
+					sparks[i].trail.push(point);
+				}
+			}else{
+				sparks[i].trail.push(point);
+			}
+			if(sparks[i].trail.length>5)sparks[i].trail.splice(0,1);				
+			sparks[i].x+=sparks[i].vx;
+			sparks[i].y+=sparks[i].vy;
+			sparks[i].z+=sparks[i].vz;
+			sparks[i].vx/=1.075;
+			sparks[i].vy/=1.075;
+			sparks[i].vz/=1.075;
+		}else{
+			sparks.splice(i,1);
+		}
+	}
+	p=Math.atan2(playerX,playerZ);
+	d=Math.sqrt(playerX*playerX+playerZ*playerZ);
+	d+=Math.sin(frames/80)/1.25;
+	t=Math.sin(frames/200)/40;
+	playerX=Math.sin(p+t)*d;
+	playerZ=Math.cos(p+t)*d;
+	yaw=pi+p+t;
+}
+
+function rgb(col){
+	
+	var r = parseInt((.5+Math.sin(col)*.5)*16);
+	var g = parseInt((.5+Math.cos(col)*.5)*16);
+	var b = parseInt((.5-Math.sin(col)*.5)*16);
+	return "#"+r.toString(16)+g.toString(16)+b.toString(16);
+}
+
+function draw(){
+	
+	ctx.clearRect(0,0,cx*2,cy*2);
+	
+	ctx.fillStyle="#ff8";
+	for(i=-100;i<100;i+=3){
+		for(j=-100;j<100;j+=4){
+			x=i;z=j;y=25;
+			point=rasterizePoint(x,y,z);
+			if(point.d!=-1){
+				size=250/(1+point.d);
+				d = Math.sqrt(x * x + z * z);
+				a = 0.75 - Math.pow(d / 100, 6) * 0.75;
+				if(a>0){
+					ctx.globalAlpha = a;
+					ctx.fillRect(point.x-size/2,point.y-size/2,size,size);				
+				}
+			}
+		}
+	}
+	ctx.globalAlpha=1;
+	for(i=0;i<seeds.length;++i){
+		point=rasterizePoint(seeds[i].x,seeds[i].y,seeds[i].z);
+		if(point.d!=-1){
+			size=200/(1+point.d);
+			ctx.fillRect(point.x-size/2,point.y-size/2,size,size);
+		}
+	}
+	point1=new Object();
+	for(i=0;i<sparks.length;++i){
+		point=rasterizePoint(sparks[i].x,sparks[i].y,sparks[i].z);
+		if(point.d!=-1){
+			size=sparks[i].radius*200/(1+point.d);
+			if(sparks[i].alpha<0)sparks[i].alpha=0;
+			if(sparks[i].trail.length){
+				point1.x=point.x;
+				point1.y=point.y;
+				switch(sparks[i].img){
+					case sparkPics[0]:ctx.strokeStyle="#f84";break;
+					case sparkPics[1]:ctx.strokeStyle="#84f";break;
+					case sparkPics[2]:ctx.strokeStyle="#8ff";break;
+					case sparkPics[3]:ctx.strokeStyle="#fff";break;
+					case sparkPics[4]:ctx.strokeStyle="#4f8";break;
+					case sparkPics[5]:ctx.strokeStyle="#f44";break;
+					case sparkPics[6]:ctx.strokeStyle="#f84";break;
+					case sparkPics[7]:ctx.strokeStyle="#84f";break;
+					case sparkPics[8]:ctx.strokeStyle="#fff";break;
+					case sparkPics[9]:ctx.strokeStyle="#44f";break;
+				}
+				for(j=sparks[i].trail.length-1;j>=0;--j){
+					point2=rasterizePoint(sparks[i].trail[j].x,sparks[i].trail[j].y,sparks[i].trail[j].z);
+					if(point2.d!=-1){
+						ctx.globalAlpha=j/sparks[i].trail.length*sparks[i].alpha/2;
+						ctx.beginPath();
+						ctx.moveTo(point1.x,point1.y);
+						ctx.lineWidth=1+sparks[i].radius*10/(sparks[i].trail.length-j)/(1+point2.d);
+						ctx.lineTo(point2.x,point2.y);
+						ctx.stroke();
+						point1.x=point2.x;
+						point1.y=point2.y;
+					}
+				}
+			}
+			ctx.globalAlpha=sparks[i].alpha;
+			ctx.drawImage(sparks[i].img,point.x-size/2,point.y-size/2,size,size);
+		}
+	}
+}
+
+function frame(){
+
+	if(frames>100000){
+		seedTimer=0;
+		frames=0;
+	}
+	frames++;
+	draw();
+	doLogic();
+	requestAnimationFrame(frame);
+}
+
+function newtime(){
+    var time=new Date("2025/1/29,00:00:00")//这是春节那天的时间
+var nowtime=new Date()//获取今天现在的事件
+    var lefttime=parseInt((time.getTime()-nowtime.getTime())/1000)//他们之间的时间差
+    d=parseInt(lefttime/(24*60*60))//所剩day 
+    h=parseInt(lefttime/(60*60)%24)//小时
+    m=parseInt(lefttime/60%60)//分钟
+    s=parseInt(lefttime%60)//秒
+    var Number =
+          "#" +
+          // 下舍入（0-1随机数 乘以 255）转换为16进制
+          Math.floor(Math.random() * 255).toString(16) +
+          Math.floor(Math.random() * 255).toString(16) +
+          Math.floor(Math.random() * 255).toString(16);
+          document.getElementById('year').style.color = Number
+    document.getElementById('year').innerHTML='距离新年还有：'+d+"天"+h+"小时"+m+"分"+s+"秒";//获取值呈现在页面上
+    if(lefttime<=0){
+        document.getElementById('year').innerHTML="祝大家：新年快乐！"
+    }
+}//判断是否达到如果倒计时完成则显示新年快乐
+newtime();
+setInterval(newtime,1000)//计时器
+window.addEventListener("resize",()=>{
+	canvas.width=canvas.clientWidth;
+	canvas.height=canvas.clientHeight;
+	cx=canvas.width/2;
+	cy=canvas.height/2;
+});
+
+var arr = ['生活如意，事业高升。','前程似锦，美梦成真。','年年今日，岁岁今朝。','事事顺利，万事如意。',
+'愿与同僚，共分此乐。',
+'事业有成，幸福快乐。',
+'生日快乐，幸福安康。',
+'幸福快乐，与君同在。',
+'年丰人寿羊得草， 花好月圆猴采桃。',
+
+'羊尾宜拖兵烬去，猴头须带太平来。',
+
+'猴捧仙桃国安人寿，羊衔嘉穗物阜年丰。',
+
+'祝你时时快乐，分分精彩，秒秒幸福。',
+
+'发财无限，使劲赚钱!接财神',
+
+'祝您好事连连，好梦圆圆!拜新年',
+
+'加薪买房购小车，娶妻生子成家室!',
+
+'新年祝福无限，发财跨越2021!',
+' 新年快乐!万事大吉!合家欢乐!财源广进!恭喜发财!',
+
+'贺新年，庆佳节，恭喜发财!新年好，万事顺，事事如意!',
+
+'新年快乐!祝您新的一年身体健康!工作顺利!生活美满!',
+
+'新年的钟声悠然响起，飘送着我的祝福，萦绕在您的身边。',
+
+'新年好!祝新年心情好，身体好，一切顺心。',
+
+'恭喜贵公司成功上市!在新的一年里大展宏图!',
+
+'家兴，国兴，事事兴。家圆，国圆，事事圆。',
+' 哥们，今年发财了吧 别忘了请客! 新年快乐。',
+
+'恭祝您：百福临门常有余，祥云瑞气聚新春!',
+' 喜悦伴着汗水，成功伴着艰辛，遗憾激励奋斗，我们不知不觉地走进了2023年，在新年来临之际，首先我代表信息中心祝各位新年快乐，万事如意!',
+
+'贺新春!迎新年!祝你今年中大奖。万事顺!合家欢!愿君如意福满年。拜新年',
+
+'一片绿叶，饱含着它对根的情谊;一句贺词，浓缩了我对您的祝愿。又是一个美好的开始――新年岁首，祝成功和快乐永远伴随着您。拜新年',
+
+'祝您在新的一年中，吉祥如意笑口常开;也预祝我们在新的一年中，合作愉快，万事如意。拜新年',
+
+'当旧年离去的时候，同时离去的也是所有的不快;当迎来新春的时候，同时也迎来了新的希望。祝你新年快乐。',
+' 忙忙碌碌一整年,只为等到这一天,虽然年底没红包,发发短信也过年。祝你新年快乐,万事如意!拜新年',
+
+'尊敬的阁下：非常感谢您一年来对我们的支持，籍新春佳节之即，祝您新年愉快，身体健康，万事如意。',
+
+'微风轻拂，白云远逝，在我心中永恒的是友情，祝新年快乐，万事如意。请你把这最诚挚的祝福带在身边，让幸福永远伴随你。',
+
+'2023年祝福经理：您好!祝您春节快乐合家欢乐万事如意!新春新年新气象跃马奔腾迎新年!',
+' 2023年祝福春天悄然至，马蹄碎碎声，旧事烦心去，辉煌看今朝。祝大哥大嫂岁岁平安，吉祥如意!',
+
+'2023年贺词:美丽的人生，伴随着新年的到来增添了更美丽的色彩，愿你的明天像梦想那般绚丽多姿!',
+
+'2023年贺词漫天雪花飘飘，迎来了新年，让久违的心灵相聚吧，新年快乐!愿我的祝福能融化寒冬，温暖你的心灵。–一个爱你的人。',
+
+'我小时过年，有一大群小孩子提着纸灯笼，各家乱转，回来的时候，口袋里装满了好吃的。但愿你也有这样美好的回忆!',
+
+'2023年贺词新年问好办事处处顺生活步步高彩票期期中好运天天交打牌场场胜口味顿顿好越活越年轻越长越俊俏家里出黄金墙上长钞票。',
+
+'送走旧年的时候，也送走一年的阴郁，迎来新春的时候，也迎来新的希望。给您拜年啦!',
+
+'2023年贺词春风洋溢你;家人关心你;爱情滋润你;朋友忠于你;我这儿祝福你;幸运之星永远照着你。衷心祝福你：新春快乐!',
+' 2023年运程希望我是今年第一个给你送来祝福的人，作为知己我只有打心底里对你说一句：愿你所有的愿望都能成功!',
+
+'谢谢你一年来对我工作的大力支持和帮助!愿我们在新的一年里团结开拓，把我们的工作做得更好!',
+
+'2023年运程零时的钟声响彻天涯，新年的列车准时出发。它驮去一个难忘的岁月，迎来了又一度火红的年华。祝新年快乐!',
+
+'岁末甫至，福气东来，鸿运通天。否极泰来时重申鲲鹏之志，惜时勤业中，展军无限风采。祝新年吉祥!',
+' 2023年运程虽然年年都是新年旧祝词，虽然己不知说了多少遍，但虽是旧词却有新意，感觉也会不一样的。祝新春快乐!万事如意!',
+
+'2023年运程年月在我们身边流过，许多的人和事逐渐淡忘，而你却永远在我心上，因你让我的世界再不一样，祝福你有一个不一样的新年。',
+'新春的钟声不停地敲，我的祝福不停地送。千言祝福一句话：新春快乐，祥瑞新年!',
+
+'新年好!给您拜年了!过去的一年我们合作得都很愉快，谢谢您的关照，祝您春节快乐!吉祥如意!心想事成!',
+
+'真心祝您在新的一年里平安快乐身体健康，愿您所有的梦想都能在新年得以实现。',
+
+'又是一年春来到，祝福满天飘，飘到你也飘到我，恭贺新禧!新春愉快!万事如意!心想事成!',
+
+'又是一年美好的开始，又是一段幸福的时光，又一次真诚地祝福你：过年好!',
+
+'我已经把我的祝福放在365朵花苞中，它们每天开放一朵，每天给你美好的祝福。',
+
+'值此新春佳节之际，祝您及家人幸福吉祥身体健康，乐驰千里马，更上一层楼!',
+
+'漫天雪花飘飘，迎来了新年，让久违的心灵相聚吧，我深深地祝福你：新年快乐!愿我的祝福能融化寒冬，温暖你的心灵。',
+
+'我最亲爱的朋友：在这新年里祝愿上帝保佑您!观音菩萨护住您!财神抱住您!爱神射住您!食神吻住您!',
+
+'新年新事新开始新起点定有新的收获，祝朋友们事事如意，岁岁平安，精神愉快，春节好。',
+
+'新年好!新年到，好事全到了!祝您及全家新年快乐!身体健康!工作顺利!吉祥如意!',
+
+'祝新年行大运!仕途步步高升万事胜意!麻雀得心应手财源广进!身体棒吃饭香睡觉安，合家幸福，恭喜发财!',
+
+'天增岁月人增寿，春满乾坤福满门。三羊开泰送吉祥，五福临门财源茂。恭祝新春快乐，幸福安康!!',
+
+'祝你2023年：大名鼎鼎，大吉大利，大红大紫，大显身手，大炮而红，大鸣惊人，大马当先!',
+
+'祝：新年吉祥前程似锦吉星高照财运亨通合家欢乐飞黄腾达福如东海寿比南山幸福美满美梦连连!',
+
+'春风洋溢着你，家人关心你，爱滋润着你，财神系着你，朋友忠于你，我这祝福你，幸运之星永远照着你。',
+
+'无惊无险，又是一年，新年来临，衷心祝愿，银行存款，只增不减，美好未来，努力今天，人生目标，一直向钱!',
+
+'新年辞旧岁，祝你在新的一年里，有新的开始，有新的收获，新年快乐，万事如意!',
+
+'祝你新的一年致富踏上万宝路，事业登上红塔山，情人塞过阿诗玛，财源遍布大中华。',
+
+'祝您在新的一年里财源滚滚，艳福多多，妻妾成群，儿孙满堂。东摸西吻浅呻吟，左拥右抱美人笑，羡煞韦小宝妒坏西门庆。',
+
+'有些事并不因时光流逝而褪去，有些人不因不常见面而忘记，记忆里你是我永远的朋友。迎新之际，恭祝事业蒸蒸日上。',
+
+'新春快乐!万事大吉!合家欢乐!财源广进!吉祥如意!花开富贵!金玉满堂!福禄寿禧!恭喜发财!',
+
+'祝你在新的一年里：事业正当午，身体壮如虎，金钱不胜数，干活不辛苦，悠闲像老鼠，浪漫似乐谱，快乐非你莫属!',
+
+'新春佳节到，向你问个好;身体倍健康，心情特别好;好运天天交，口味顿顿妙;家里出黄金，墙上长钞票。',
+
+'酒：倒在杯里象水，喝进肚里闹鬼，走起路来绊腿，回到家里吵嘴，爬到床上阳痿，第二天起来后悔，春节你喝了没有?',
+
+'新年好!衷心祝福你：上帝保佑你!真主关心你!菩萨爱护你!财神跟随你!幸运之神伴随你!',
+
+'祝你老兄：龙马精神事业旺，吃喝不愁不发胖，小秘争着把你傍，媳妇越长越漂亮，老的小的身体壮，新年都有新气象!',
+
+'祝愿你在新的一年里，所有的希望都能如愿，所有的梦想都能实现，所有的等候都能出现，所有的付出都能兑现。',
+
+'在这阳光灿烂的节日里，我祝你心情愉悦喜洋洋，家人团聚暖洋洋，爱情甜蜜如艳阳，绝无伤心太平洋。',
+
+'老婆是家，情人是花;工资给家，奖金买花;病了回家，好了看花;希望你在新的一年里记得常回家看看，但也别忘了浇花。',
+' 情人是鲜花握在手里不想撒朋友是葱花哪里需要哪里抓小秘是火花偶尔来点小摩擦爱人是麻花饿了才会想到他，祝小葱花快乐。',
+
+'新年祝愿天下朋友：工作舒心，薪水合心，被窝暖心，朋友知心，爱人同心，一切都顺心，永远都开心，事事都称心!',
+
+'天气预报：今年你将会遇到金钱雨幸运风爱情雾友情露幸运霞健康霜美满雷安全雹，请注意它们将会缠绕着你一整年。',]
+
+setInterval(() => {
+    var Number =
+          "#" +
+          // 下舍入（0-1随机数 乘以 255）转换为16进制
+          Math.floor(Math.random() * 255).toString(16) +
+          Math.floor(Math.random() * 255).toString(16) +
+          Math.floor(Math.random() * 255).toString(16);
+    var zhufu = document.getElementById('zhufu')
+    zhufu.style.color = Number
+    zhufu.innerHTML = arr[Math.floor(Math.random() * arr.length)]
+}, 1000);
+
+initVars();
+frame();
+
+</script>
+<div style="text-align:center;">
+</div>
+</body>
+</html>
